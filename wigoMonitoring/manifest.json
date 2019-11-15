@@ -1,0 +1,36 @@
+{
+  "manifest_version": 2,
+
+  "name": "Wigo Monitoring",
+  "short_name": "Wigo Monitoring",
+  "description": "This is the Chrome extension for Wigo. Wigo, aka \"What Is Going On\" is a light pull/push monitoring tool written in Golang.",
+  "homepage_url": "https://github.com/root-gg/wigo",
+  "author": "Root.gg",
+  "version": "0.1.7",
+
+  "options_page": "options.html",
+
+  "browser_action": {
+    "default_icon": "wigo.png",
+    "default_popup": "popup.html",
+    "options_page": "options.html"
+  },
+  "permissions": [
+    "*://*/*",
+    "notifications",
+    "storage"
+  ],
+  "background": {
+    "scripts": [
+      "js/jquery.min.js",
+      "js/bootstrap.min.js",
+      "plugin.js",
+      "background.js"
+    ]
+  },
+  "icons": {
+      "16": "wigo.png",
+      "48": "wigo.png",
+      "128": "wigo.png"
+  }
+}
