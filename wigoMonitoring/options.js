@@ -1,5 +1,7 @@
+const myAudio = new Audio();
+
 function save_options() {
-    if(!jQuery('#soundUrl').val()) {
+    if (!jQuery('#soundUrl').val()) {
         jQuery('#soundUrl').val(defaultSoundUrl)
     }
     myAudio.pause();
@@ -11,16 +13,14 @@ function save_options() {
         wigoUrl: wigoUrl,
         soundVolume: soundVolume,
         soundUrl: soundUrl
-    }, function() {
-        loading();
+    }, function () {
         jQuery('#status').html('Options saved !');
         jQuery('#status').show();
         restore_options();
-        updateMontioring();
-        setTimeout(function() {
-            status.textContent = '';
+        chrome.runtime.sendMessage({ updateMonitoring: true });
+        setTimeout(function () {
             jQuery('#status').fadeOut();
-        }, 3*1000);
+        }, 3 * 1000);
     });
 }
 
@@ -40,48 +40,46 @@ function stopSound() {
 }
 
 function restore_options() {
-    chrome.storage.sync.get(null, function(options) {
-        if(options.hasOwnProperty('wigoUrl')){
+    chrome.storage.sync.get(null, function (options) {
+        if (options.hasOwnProperty('wigoUrl')) {
             jQuery('#wigoUrl').val(options.wigoUrl);
         }
-        if(options.hasOwnProperty('soundVolume')){
+        if (options.hasOwnProperty('soundVolume')) {
             jQuery('#soundVolume').val(options.soundVolume);
         }
-        else
-        {
+        else {
             jQuery('#soundVolume').val(1);
         }
-        if(options.hasOwnProperty('soundUrl')){
+        if (options.hasOwnProperty('soundUrl')) {
             jQuery('#soundUrl').val(options.soundUrl);
         }
-        else
-        {
+        else {
             jQuery('#soundUrl').val(defaultSoundUrl);
         }
     });
 }
-jQuery(document).ready(function(){
+jQuery(document).ready(function () {
     restore_options();
 });
-jQuery('form').submit(function(){
+jQuery('form').submit(function () {
     save_options();
     return false;
 });
-jQuery('#soundVolume').change(function(){
-    if(!jQuery('#soundUrl').val()) {
+jQuery('#soundVolume').change(function () {
+    if (!jQuery('#soundUrl').val()) {
         jQuery('#soundUrl').val(defaultSoundUrl)
     }
     testSound();
 });
-jQuery('#soundTest').click(function(){
-    if(!jQuery('#soundUrl').val()) {
+jQuery('#soundTest').click(function () {
+    if (!jQuery('#soundUrl').val()) {
         jQuery('#soundUrl').val(defaultSoundUrl)
     }
     testSound();
 });
-jQuery('#soundStop').click(function(){
+jQuery('#soundStop').click(function () {
     stopSound();
 });
-jQuery('#soundReset').click(function(){
+jQuery('#soundReset').click(function () {
     jQuery('#soundUrl').val(defaultSoundUrl);
 });

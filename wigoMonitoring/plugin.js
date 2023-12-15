@@ -2,16 +2,33 @@ function loading() {
     renderPluginError('...');
 }
 
-var myAudio = new Audio();
+async function playSound(source, volume) {
+    try {
+        await createOffscreen();
+        await chrome.runtime.sendMessage({ play: { source, volume } });
+    } catch (e) {
+        console.log(e);
+    }
+}
+
+async function createOffscreen() {
+    if (await chrome.offscreen.hasDocument()) return;
+    await chrome.offscreen.createDocument({
+        url: 'offscreen.html',
+        reasons: ['AUDIO_PLAYBACK'],
+        justification: 'Playing audio notifications'
+    });
+}
+
 var wigoUrl = null;
 var defaultSoundUrl = 'alarm.mp3';
 var soundUrl = defaultSoundUrl;
 var soundVolume = 1;
 var downHosts = [];
 var hostsStatuses = {};
-chrome.browserAction.setPopup({'popup': 'popup.html'});
+chrome.action.setPopup({ 'popup': 'popup.html' });
 
-function updateMontioring() {
+function updateMonitoring() {
     downHosts = [];
     hostsStatuses = {
         'ok': [],
@@ -20,15 +37,15 @@ function updateMontioring() {
         'crit': [],
         'err': []
     };
-    chrome.storage.sync.get(null, function(options) {
-        if(options.hasOwnProperty('soundVolume')){
+    chrome.storage.sync.get(null, function (options) {
+        if (options.hasOwnProperty('soundVolume')) {
             soundVolume = options.soundVolume;
         }
-        if(options.hasOwnProperty('soundUrl')){
+        if (options.hasOwnProperty('soundUrl')) {
             soundUrl = options.soundUrl;
         }
-        if(options.hasOwnProperty('wigoUrl')){
-            wigoUrl = options.wigoUrl; 
+        if (options.hasOwnProperty('wigoUrl')) {
+            wigoUrl = options.wigoUrl;
             loadGroups();
         } else {
             renderPluginError('CONF');
@@ -37,37 +54,45 @@ function updateMontioring() {
 }
 
 function loadGroups() {
-    jQuery.getJSON(wigoUrl+"/api/groups").done(function(data) {
-        $.each(data, function(i, group) {
-            loadHostsInGroup(group);
+    fetch(wigoUrl + "/api/groups")
+        .then(res => res.json())
+        .then(function (data) {
+            data.forEach((group, i) => {
+                loadHostsInGroup(group);
+            });
+        })
+        .catch(function (err) {
+            renderPluginError('ERR');
+            throw err;
         });
-    }).fail(function() {
-        renderPluginError('ERR');
-    });
 }
 
 function loadHostsInGroup(group) {
-    jQuery.getJSON(wigoUrl+"/api/groups/"+group).done(function(data) {
-        $.each(data.Hosts, function(i, host) {
-            handleHost(host);
+    fetch(wigoUrl + "/api/groups/" + group)
+        .then(res => res.json())
+        .then(function (data) {
+            data.Hosts.forEach((host, i) => {
+                handleHost(host);
+            });
+            updateDisplay();
+        })
+        .catch(function (err) {
+            renderPluginError('ERR');
+            throw err;
         });
-        updateDisplay();
-    }).fail(function() {
-        renderPluginError('ERR');
-    });
 }
 
 function handleHost(host) {
-    if(!host.IsAlive) {
+    if (!host.IsAlive) {
         downHosts.push(host.Name);
     }
-    if(host.Status > 100 && host.Status < 200) {
+    if (host.Status > 100 && host.Status < 200) {
         hostsStatuses['info'].push(host.Name);
-    } else if(host.Status >= 200 && host.Status < 300) {
+    } else if (host.Status >= 200 && host.Status < 300) {
         hostsStatuses['warn'].push(host.Name);
-    } else if(host.Status >= 300 && host.Status < 500) {
+    } else if (host.Status >= 300 && host.Status < 500) {
         hostsStatuses['crit'].push(host.Name);
-    } else if(host.Status >= 500) {
+    } else if (host.Status >= 500) {
         hostsStatuses['err'].push(host.Name);
     } else {
         hostsStatuses['ok'].push(host.Name);
@@ -77,76 +102,74 @@ function handleHost(host) {
 function updateDisplay() {
     var currentStatus = 'ok';
     var currentNb = 0;
-    if(hostsStatuses['err'].length) {
+    if (hostsStatuses['err'].length) {
         currentStatus = 'err';
         currentNb = hostsStatuses['err'].length;
-    } else if(hostsStatuses['crit'].length) {
+    } else if (hostsStatuses['crit'].length) {
         currentStatus = 'crit';
         currentNb = hostsStatuses['crit'].length;
-    } else if(hostsStatuses['warn'].length) {
+    } else if (hostsStatuses['warn'].length) {
         currentStatus = 'warn';
         currentNb = hostsStatuses['warn'].length;
-    } else if(hostsStatuses['info'].length) {
+    } else if (hostsStatuses['info'].length) {
         currentStatus = 'info';
         currentNb = hostsStatuses['info'].length;
-    } else if(hostsStatuses['ok'].length) {
+    } else if (hostsStatuses['ok'].length) {
         currentStatus = 'ok';
         currentNb = hostsStatuses['ok'].length;
     }
 
-    if(downHosts.length) {
-        if(soundVolume || soundUrl){
-            myAudio.pause();
-            myAudio.currentTime = 0.0;
-            myAudio.src = soundUrl;
-            myAudio.volume = soundVolume;
-            myAudio.play();
+    if (downHosts.length) {
+        if (soundVolume || soundUrl) {
+            playSound(soundUrl, soundVolume)
         }
-        renderWigoError(downHosts.length+" KO", currentStatus);
+        renderWigoError(downHosts.length + " KO", currentStatus);
     } else {
-        renderWigoOk(currentNb+"", currentStatus);
+        renderWigoOk(currentNb + "", currentStatus);
     }
 }
 
+
+
 function renderWigoOk(text, level) {
-    chrome.browserAction.setIcon({path:"wigo-green.png"});
-    if(level == 'crit') {
-        chrome.browserAction.setBadgeBackgroundColor({color: '#ed5565'});
-    } else if(level == 'info') {
-        chrome.browserAction.setBadgeBackgroundColor({color: '#4fc1e9'});
-    } else if(level == 'warn') {
-        chrome.browserAction.setBadgeBackgroundColor({color: '#ffce54'});
-    } else if(level == 'err') {
-        chrome.browserAction.setBadgeBackgroundColor({color: '#535B67'});
-    } else if(level == 'ok') {
-        chrome.browserAction.setBadgeBackgroundColor({color: '#a0d468'});
+    chrome.action.setIcon({ path: "wigo-green.png" });
+    if (level == 'crit') {
+        chrome.action.setBadgeBackgroundColor({ color: '#ed5565' });
+    } else if (level == 'info') {
+        chrome.action.setBadgeBackgroundColor({ color: '#4fc1e9' });
+    } else if (level == 'warn') {
+        chrome.action.setBadgeBackgroundColor({ color: '#ffce54' });
+    } else if (level == 'err') {
+        chrome.action.setBadgeBackgroundColor({ color: '#535B67' });
+    } else if (level == 'ok') {
+        chrome.action.setBadgeBackgroundColor({ color: '#a0d468' });
     } else {
-        chrome.browserAction.setBadgeBackgroundColor({color: '#aab2bd'});
+        chrome.action.setBadgeBackgroundColor({ color: '#aab2bd' });
     }
-    chrome.browserAction.setBadgeText({text: text});
+    chrome.action.setBadgeText({ text: text });
 }
 
 function renderWigoError(text, level) {
-    chrome.browserAction.setIcon({path:"wigo-red.png"});
-    if(level == 'crit') {
-        chrome.browserAction.setBadgeBackgroundColor({color: '#ed5565'});
-    } else if(level == 'info') {
-        chrome.browserAction.setBadgeBackgroundColor({color: '#4fc1e9'});
-    } else if(level == 'warn') {
-        chrome.browserAction.setBadgeBackgroundColor({color: '#ffce54'});
-    } else if(level == 'err') {
-        chrome.browserAction.setBadgeBackgroundColor({color: '#535B67'});
-    } else if(level == 'ok') {
-        chrome.browserAction.setBadgeBackgroundColor({color: '#a0d468'});
+    chrome.action.setIcon({ path: "wigo-red.png" });
+    if (level == 'crit') {
+        chrome.action.setBadgeBackgroundColor({ color: '#ed5565' });
+    } else if (level == 'info') {
+        chrome.action.setBadgeBackgroundColor({ color: '#4fc1e9' });
+    } else if (level == 'warn') {
+        chrome.action.setBadgeBackgroundColor({ color: '#ffce54' });
+    } else if (level == 'err') {
+        chrome.action.setBadgeBackgroundColor({ color: '#535B67' });
+    } else if (level == 'ok') {
+        chrome.action.setBadgeBackgroundColor({ color: '#a0d468' });
     } else {
-        chrome.browserAction.setBadgeBackgroundColor({color: '#aab2bd'});
+        chrome.action.setBadgeBackgroundColor({ color: '#aab2bd' });
     }
-    chrome.browserAction.setBadgeText({text: text});
+    chrome.action.setBadgeText({ text: text });
 }
 
 function renderPluginError(text) {
-    chrome.browserAction.setIcon({path:"wigo-blue.png"});
-    chrome.browserAction.setBadgeBackgroundColor({color: [0, 0, 255, 255]});
-    chrome.browserAction.setBadgeText({text: text});
+    chrome.action.setIcon({ path: "wigo-blue.png" });
+    chrome.action.setBadgeBackgroundColor({ color: [0, 0, 255, 255] });
+    chrome.action.setBadgeText({ text: text });
 }
 
