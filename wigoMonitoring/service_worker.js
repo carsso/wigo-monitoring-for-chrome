@@ -17,3 +17,7 @@ chrome.runtime.onMessage.addListener(msg => {
         updateMonitoring();
     }
 });
+
+chrome.runtime.onStartup.addListener( () => {
+    console.log(`onStartup()`);
+});

@@ -1,4 +1,5 @@
 const myAudio = new Audio();
+var defaultSoundUrl = 'alarm.mp3';
 
 function save_options() {
     if (!jQuery('#soundUrl').val()) {
