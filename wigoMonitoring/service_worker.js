@@ -2,22 +2,26 @@ importScripts(
     './plugin.js'
 );
 
-function start() {
+chrome.alarms.onAlarm.addListener(() => {
+    updateMonitoring();
+});
+
+async function start() {
     loading();
     updateMonitoring();
-    setInterval(function () {
-        updateMonitoring();
-    }, 30 * 1000); // 60 * 1000 milsec
+    let alarm = await chrome.alarms.get();
+    if(!alarm)  {
+        chrome.alarms.create({ periodInMinutes: 0.5 });
+    }
 }
 start();
 
 chrome.runtime.onMessage.addListener(msg => {
     if ('updateMonitoring' in msg) {
-        loading();
-        updateMonitoring();
+        start();
     }
 });
 
-chrome.runtime.onStartup.addListener( () => {
-    console.log(`onStartup()`);
+chrome.runtime.onStartup.addListener(() => {
+    start();
 });
