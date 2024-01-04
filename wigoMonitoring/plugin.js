@@ -3,6 +3,7 @@ function loading() {
 }
 
 async function playSound(source, volume) {
+    console.debug("Playing sound " + source + " with volume " + volume);
     try {
         await createOffscreen();
         await chrome.runtime.sendMessage({ play: { source, volume } });
@@ -20,154 +21,136 @@ async function createOffscreen() {
     });
 }
 
-var wigoUrl = null;
 var defaultSoundUrl = 'alarm.mp3';
 var soundUrl = defaultSoundUrl;
 var soundVolume = 1;
-var downHosts = [];
-var hostsStatuses = {};
 chrome.action.setPopup({ 'popup': 'popup.html' });
 
-function updateMonitoring() {
-    downHosts = [];
-    hostsStatuses = {
-        'ok': [],
-        'info': [],
-        'warn': [],
-        'crit': [],
-        'err': []
-    };
-    chrome.storage.sync.get(null, function (options) {
-        if (options.hasOwnProperty('soundVolume')) {
+async function updateMonitoring() {
+    chrome.storage.sync.get(null, async function (options) {
+        if (options.hasOwnProperty('soundVolume') && options.soundVolume) {
             soundVolume = options.soundVolume;
         }
-        if (options.hasOwnProperty('soundUrl')) {
+        if (options.hasOwnProperty('soundUrl') && options.soundUrl) {
             soundUrl = options.soundUrl;
         }
-        if (options.hasOwnProperty('wigoUrl')) {
-            wigoUrl = options.wigoUrl;
-            loadGroups();
+        if (options.hasOwnProperty('wigoUrl') && options.wigoUrl) {
+            let hostsStatuses = await loadGroups(options.wigoUrl);
+            updateDisplay(hostsStatuses);
         } else {
             renderPluginError('CONF');
         }
     });
 }
 
-function loadGroups() {
-    fetch(wigoUrl + "/api/groups")
-        .then(res => res.json())
-        .then(function (data) {
-            data.forEach((group, i) => {
-                loadHostsInGroup(group);
+async function loadGroups(wigoUrl) {
+    let hostsStatuses = {};
+    try {
+        console.debug("Listing groups");
+        let response = await fetch(wigoUrl + "/api/groups");
+        let data = await response.json();
+        console.debug("Groups found:", data);
+        for (const group of data) {
+            let groupHostsStatuses = await loadHostsInGroup(wigoUrl, group);
+            Object.entries(groupHostsStatuses).forEach(([hostName, status]) => {
+                if (!hostsStatuses.hasOwnProperty(status)) {
+                    hostsStatuses[status] = [];
+                }
+                hostsStatuses[status].push(hostName);
             });
-        })
-        .catch(function (err) {
-            renderPluginError('ERR');
-            throw err;
-        });
+        }
+    } catch(error) {
+        renderPluginError('ERR');
+        console.error(error);
+        throw error;
+    }
+    console.debug("Global status:", hostsStatuses);
+    return hostsStatuses;
 }
 
-function loadHostsInGroup(group) {
-    fetch(wigoUrl + "/api/groups/" + group)
-        .then(res => res.json())
-        .then(function (data) {
-            data.Hosts.forEach((host, i) => {
-                handleHost(host);
-            });
-            updateDisplay();
-        })
-        .catch(function (err) {
-            renderPluginError('ERR');
-            throw err;
+async function loadHostsInGroup(wigoUrl, group) {
+    let groupHostsStatuses = {};
+    console.debug("Loading group " + group);
+    try {
+        let response = await fetch(wigoUrl + "/api/groups/" + group);
+        let data = await response.json();
+        data.Hosts.forEach((host, i) => {
+            groupHostsStatuses[host.Name] = getHostStatus(host);
         });
+    } catch(error) {
+        renderPluginError('ERR');
+        console.error(error);
+        throw error;
+    }
+    console.debug("Group status " + group + ":", groupHostsStatuses);
+    return groupHostsStatuses;
 }
 
-function handleHost(host) {
+function getHostStatus(host) {
     if (!host.IsAlive) {
-        downHosts.push(host.Name);
+        return 'down';
     }
     if (host.Status > 100 && host.Status < 200) {
-        hostsStatuses['info'].push(host.Name);
-    } else if (host.Status >= 200 && host.Status < 300) {
-        hostsStatuses['warn'].push(host.Name);
-    } else if (host.Status >= 300 && host.Status < 500) {
-        hostsStatuses['crit'].push(host.Name);
-    } else if (host.Status >= 500) {
-        hostsStatuses['err'].push(host.Name);
-    } else {
-        hostsStatuses['ok'].push(host.Name);
+        return 'info';
     }
+    if (host.Status >= 200 && host.Status < 300) {
+        return 'warn';
+    }
+    if (host.Status >= 300 && host.Status < 500) {
+        return 'crit';
+    }
+    if (host.Status >= 500) {
+        return 'err';
+    }
+    return 'ok';
 }
 
-function updateDisplay() {
+function updateDisplay(hostsStatuses) {
     var currentStatus = 'ok';
     var currentNb = 0;
-    if (hostsStatuses['err'].length) {
-        currentStatus = 'err';
-        currentNb = hostsStatuses['err'].length;
-    } else if (hostsStatuses['crit'].length) {
-        currentStatus = 'crit';
-        currentNb = hostsStatuses['crit'].length;
-    } else if (hostsStatuses['warn'].length) {
-        currentStatus = 'warn';
-        currentNb = hostsStatuses['warn'].length;
-    } else if (hostsStatuses['info'].length) {
-        currentStatus = 'info';
-        currentNb = hostsStatuses['info'].length;
-    } else if (hostsStatuses['ok'].length) {
-        currentStatus = 'ok';
-        currentNb = hostsStatuses['ok'].length;
+    for (var status of ['down', 'err', 'crit', 'warn', 'info', 'ok']) {
+        if (hostsStatuses.hasOwnProperty(status) && hostsStatuses[status].length) {
+            currentStatus = status;
+            currentNb = hostsStatuses[status].length;
+            console.debug("Status " + status + " has " + currentNb + " hosts");
+            break;
+        }
+        console.debug("Status " + status + " is empty");
     }
+    console.debug("Updating display with status " + currentStatus + " and nb " + currentNb);
 
-    if (downHosts.length) {
-        if (soundVolume || soundUrl) {
+    if(currentStatus == 'down') {
+        if (soundVolume && soundUrl) {
             playSound(soundUrl, soundVolume)
         }
-        renderWigoError(downHosts.length + " KO", currentStatus);
-    } else {
-        renderWigoOk(currentNb + "", currentStatus);
     }
+    renderWigo(currentNb + "", currentStatus);
 }
 
-
-
-function renderWigoOk(text, level) {
-    chrome.action.setIcon({ path: "wigo-green.png" });
-    if (level == 'crit') {
-        chrome.action.setBadgeBackgroundColor({ color: '#ed5565' });
+function renderWigo(text, level) {
+    let icon = 'wigo-green.png';
+    let color = '#aab2bd';
+    if (level == 'down') {
+        icon = 'wigo-red.png';
+    } else if (level == 'crit') {
+        color = '#ed5565';
     } else if (level == 'info') {
-        chrome.action.setBadgeBackgroundColor({ color: '#4fc1e9' });
+        color = '#4fc1e9';
     } else if (level == 'warn') {
-        chrome.action.setBadgeBackgroundColor({ color: '#ffce54' });
+        color = '#ffce54';
     } else if (level == 'err') {
-        chrome.action.setBadgeBackgroundColor({ color: '#535B67' });
+        color = '#535B67';
     } else if (level == 'ok') {
-        chrome.action.setBadgeBackgroundColor({ color: '#a0d468' });
-    } else {
-        chrome.action.setBadgeBackgroundColor({ color: '#aab2bd' });
+        color = '#a0d468';
     }
-    chrome.action.setBadgeText({ text: text });
-}
-
-function renderWigoError(text, level) {
-    chrome.action.setIcon({ path: "wigo-red.png" });
-    if (level == 'crit') {
-        chrome.action.setBadgeBackgroundColor({ color: '#ed5565' });
-    } else if (level == 'info') {
-        chrome.action.setBadgeBackgroundColor({ color: '#4fc1e9' });
-    } else if (level == 'warn') {
-        chrome.action.setBadgeBackgroundColor({ color: '#ffce54' });
-    } else if (level == 'err') {
-        chrome.action.setBadgeBackgroundColor({ color: '#535B67' });
-    } else if (level == 'ok') {
-        chrome.action.setBadgeBackgroundColor({ color: '#a0d468' });
-    } else {
-        chrome.action.setBadgeBackgroundColor({ color: '#aab2bd' });
-    }
+    console.debug("Rendering icon " + icon + " with color " + color + " and text " + text);
+    chrome.action.setBadgeBackgroundColor({ color: color });
+    chrome.action.setIcon({ path: icon });
     chrome.action.setBadgeText({ text: text });
 }
 
 function renderPluginError(text) {
+    console.debug("Rendering error icon with text " + text);
     chrome.action.setIcon({ path: "wigo-blue.png" });
     chrome.action.setBadgeBackgroundColor({ color: [0, 0, 255, 255] });
     chrome.action.setBadgeText({ text: text });

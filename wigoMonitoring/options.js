@@ -1,7 +1,7 @@
 const myAudio = new Audio();
 var defaultSoundUrl = 'alarm.mp3';
 
-function save_options() {
+function saveOptions() {
     if (!jQuery('#soundUrl').val()) {
         jQuery('#soundUrl').val(defaultSoundUrl)
     }
@@ -17,7 +17,7 @@ function save_options() {
     }, function () {
         jQuery('#status').html('Options saved !');
         jQuery('#status').show();
-        restore_options();
+        restoreOptions();
         chrome.runtime.sendMessage({ updateMonitoring: true });
         setTimeout(function () {
             jQuery('#status').fadeOut();
@@ -40,7 +40,7 @@ function stopSound() {
     myAudio.currentTime = 0;
 }
 
-function restore_options() {
+function restoreOptions() {
     chrome.storage.sync.get(null, function (options) {
         if (options.hasOwnProperty('wigoUrl')) {
             jQuery('#wigoUrl').val(options.wigoUrl);
@@ -60,10 +60,10 @@ function restore_options() {
     });
 }
 jQuery(document).ready(function () {
-    restore_options();
+    restoreOptions();
 });
 jQuery('form').submit(function () {
-    save_options();
+    saveOptions();
     return false;
 });
 jQuery('#soundVolume').change(function () {

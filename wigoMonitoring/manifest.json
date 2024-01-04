@@ -5,7 +5,7 @@
     "description": "This is the Chrome extension for Wigo. Wigo, aka \"What Is Going On\" is a light pull/push monitoring tool written in Golang.",
     "homepage_url": "https://github.com/root-gg/wigo",
     "author": "Root.gg",
-    "version": "0.2.2",
+    "version": "0.2.3",
     "options_page": "options.html",
     "permissions": [
         "alarms",
